@@ -1,8 +1,5 @@
-# 我的第一个股票分析脚本
-# QingcheDi - stock_analysis
-
 import os
-os.environ['NO_PROXY'] = '*'  # 强制所有请求不走代理
+os.environ['NO_PROXY'] = '*'
 
 import akshare as ak
 import pandas as pd
@@ -10,38 +7,48 @@ import matplotlib.pyplot as plt
 import matplotlib
 from datetime import date
 
-# 自动获取今天日期，永远不会过期
 today = date.today().strftime("%Y%m%d")
 
-# 获取贵州茅台(600519)历史股价
-# ak.stock_zh_a_hist = akshare 获取 A 股历史数据的函数
 df = ak.stock_zh_a_hist(
-    symbol="600519",        # 股票代码
-    period="daily",         # 日线数据（还有 weekly 周线、monthly 月线）
-    start_date="20250101",  # 开始日期
-    end_date=today,         # 结束日期：自动取今天
-    adjust="qfq"            # 前复权：消除分红除权对价格的影响
+    symbol="600519",
+    period="daily",
+    start_date="20250101",
+    end_date=today,
+    adjust="qfq"
 )
 
-# 只保留我们关心的 6 列，其余列丢掉
 df = df[["日期", "开盘", "收盘", "最高", "最低", "成交量"]]
 
-# 打印最近 10 条数据
-pd.set_option('display.unicode.east_asian_width', True)  # 让中文列名对齐
-print("=== 贵州茅台 (600519) 历史股价 ===")
-print(df.tail(10))
-print(f"\n数据共 {len(df)} 条，从 {df['日期'].iloc[0]} 到 {df['日期'].iloc[-1]}")
+df["MA5"] = df["收盘"].rolling(window=5).mean()
+df["MA20"] = df["收盘"].rolling(window=20).mean()
 
-# 画收盘价走势图
-matplotlib.rcParams['font.family'] = 'Arial Unicode MS'  # 支持中文显示
+df["金叉"] = (df["MA5"] > df["MA20"]) & (df["MA5"].shift(1) <= df["MA20"].shift(1))
+df["死叉"] = (df["MA5"] < df["MA20"]) & (df["MA5"].shift(1) >= df["MA20"].shift(1))
 
-plt.figure(figsize=(12, 5))
-plt.plot(df["日期"], df["收盘"], color="red", linewidth=1.5)
-plt.title("贵州茅台 (600519) 收盘价走势")
+pd.set_option('display.unicode.east_asian_width', True)
+print("=== 贵州茅台 (600519) 均线策略信号 ===")
+print(df[["日期", "收盘", "MA5", "MA20", "金叉", "死叉"]].tail(10))
+
+golden = df[df["金叉"] == True]
+death = df[df["死叉"] == True]
+print(f"\n金叉出现 {len(golden)} 次，死叉出现 {len(death)} 次")
+
+matplotlib.rcParams['font.family'] = 'Arial Unicode MS'
+
+plt.figure(figsize=(14, 6))
+plt.plot(df["日期"], df["收盘"], color="black", linewidth=1, label="收盘价", alpha=0.6)
+plt.plot(df["日期"], df["MA5"], color="blue", linewidth=1.2, label="MA5")
+plt.plot(df["日期"], df["MA20"], color="orange", linewidth=1.2, label="MA20")
+
+plt.scatter(golden["日期"], golden["收盘"], marker="^", color="red", s=100, label="金叉(买入)", zorder=5)
+plt.scatter(death["日期"], death["收盘"], marker="v", color="green", s=100, label="死叉(卖出)", zorder=5)
+
+plt.title("贵州茅台 (600519) 双均线策略")
 plt.xlabel("日期")
 plt.ylabel("价格 (元)")
-plt.xticks(df["日期"][::10], rotation=45)  # 每隔10天显示一个日期标签
+plt.xticks(df["日期"][::10], rotation=45)
+plt.legend()
 plt.tight_layout()
-plt.savefig("maotai_price.png", dpi=150, bbox_inches='tight')  # dpi=150 让图片更清晰
+plt.savefig("maotai_ma.png", dpi=150, bbox_inches='tight')
 plt.show()
-print("图表已保存为 maotai_price.png")
+print("图表已保存为 maotai_ma.png")
